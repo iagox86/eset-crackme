@@ -1,0 +1,1 @@
+ cat XXXXXXXXXXXXXXXX  | sed "s/add/aaa/" | sed "s/rol/bbb/" | sed "s/ror/ccc/" | sed "s/sub/ddd/" | sed -r 's/eax\+/eee/' | sed -r 's/eax\-/fff/' | sed "s/aaa/sub/" | sed "s/bbb/ror/" | sed "s/ccc/rol/" | sed "s/ddd/add/" | sed "s/eee/eax-/" | sed "s/fff/eax+/" > final.asm

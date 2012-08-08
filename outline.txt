@@ -1,0 +1,52 @@
+How I did this:
+* Open up in IDA, mess around a bit, hex-edit the executable to ensure the strings are real
+* Load up debugger, put breakpoint at the start of the obvious key-gen function
+  -> failed!
+* Put breakpoint other places
+  -> fail fail fail! 
+* Break out TSearch to see if the string I'm typing is even in the proper process
+  -> There are two process running
+  -> String I type is only in child
+  -> Hmm!
+* Attempt to attach debugger to child process
+  -> Already being debugged -- realize the the parent process debugs the child
+* Try putting breakpoint on CreateProcessA (and finding all calls to that) 
+  -> fail! (not really sure why, to be honest -- I may have done it wrong)
+* Load up Process Explorer
+  -> Check out the two processes
+  -> Look at callstack for parent, find out where it starts
+  -> Starts in TLS_Something, look up what TLS is
+* Load up the .exe in PEExplorer
+  -> Remove the TLS section
+* Run the TLS-less version
+  -> Crash!
+* Try and reverse what TLS section does
+  -> Find a bunch of calls to variables
+* Put a breakpoint right before the call, check the address
+  -> It's GetStartupInfoA
+  -> Look at the rest of them: CreateMutexA, GetLastErrorA, GetCommandlineA, WaitForDebugEvent, CreateProcessA, ExitProcess, GetThreadContext, SetThreadContext, ContinueDebugEvent, GetSystemInfo, VirtualAlloc, VirtualProtect, VirtualFree
+* Look into CreateProcessA
+  -> Starts with debugging enabled
+* Disable debugging 
+  -> Crash!
+* Investigate why the crashes are happening
+  -> Eventually realize, based on reversing the CreateProcessA area, that a breakpoint is being created somehow
+* Reverse the CreateProcessA and debug section more
+  -> Find the same odd pattern of setting flag 0x0100 as in the code
+  -> Eventually realize, it's enabling 'single step' (partly the way it's disable when it sees 0x90909090 by simply skipping over the step)
+* Look into the special operations at each step, adding a 'sub' before each 'xor', for example
+* Copy the whole block of assembly (where eax is modified) to a file and manipulate with a series of Linux commands (see programs included with this for more info):
+  # Add numbers to each line (so we can reverse the whole thing):
+  $ cat 01-original.asm | number_lines > 02-original-numbered.asm
+
+  # Reverse the order and remove everything before the first instruction byte:
+  $ cat 02-original-numbered.asm  | sort -r | sed "s/..................... //" > 03-original-reversed.asm
+
+  # Split the first byte off, print the line (assembly only), then print the 'special' operation (added by debugger) if necessary
+  $ cat 03-original-reversed.asm | ./insert_extra_operations > 04-extra-operations.asm
+
+  # Finally, invert the operations (add, rol, ror, and sub are reversed, as is the arithmetic in lea.. xor is left untouched)
+  $ cat 04-extra-operations.asm | sed "s/add/aaa/" | sed "s/rol/bbb/" | sed "s/ror/ccc/" | sed "s/sub/ddd/" | sed -r 's/eax\+/eee/' | sed -r 's/eax\-/fff/' | sed "s/aaa/sub/" | sed "s/bbb/ror/" | sed "s/ccc/rol/" | sed "s/ddd/add/" | sed "s/eee/eax-/" | sed "s/fff/eax+/" > 05-final.asm
+ 
+* Finally, stick the prepared assembly into a .c file (check out final.c -- it's Visual Studio only) and run it. Print the result. Bodabing! 
+
